@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       databaseScope: 'dedicated-preview'
     });
   } catch (error) {
-    if (error?.code === 'VEX_PREVIEW_DB_NOT_CONFIGURED') {
+    if (error?.code === 'VEXT_DB_NOT_CONFIGURED') {
       return res.status(200).json({
         ok: true,
         service: 'VEX v2 simulated economy',
