@@ -23,7 +23,8 @@ function bearer(req) {
   return match?.[1] || null;
 }
 
-export function createAccountHandler(poolProvider = getPool) {\n  return async function handler(req, res) {
+export function createAccountHandler(poolProvider = getPool) {
+  return async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
 
@@ -95,4 +96,7 @@ export function createAccountHandler(poolProvider = getPool) {\n  return async f
   } catch (error) {
     return sendUnavailable(res, error);
   }
+  };
 }
+
+export default createAccountHandler();
