@@ -30,6 +30,34 @@ export function createAccountHandler(poolProvider = getPool) {
 
   let db;
   try {
+    if (req.method === 'GET') {
+      const token = bearer(req);
+      if (!token) return res.status(401).json({ error: 'A valid Bearer session token is required.' });
+      db = poolProvider();
+      const result = await db.query(
+        `SELECT a.id, a.handle, a.created_at
+         FROM vex2_account_sessions s
+         JOIN vex2_accounts a ON a.id = s.account_id
+         WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+         LIMIT 1`,
+        [hashToken(token)]
+      );
+      if (!result.rowCount) return res.status(401).json({ error: 'Session is invalid or expired.' });
+      const account = result.rows[0];
+      const [balances, orders, fills] = await Promise.all([
+        db.query('SELECT asset, available, locked FROM vex2_balances WHERE account_id=$1 ORDER BY asset', [account.id]),
+        db.query("SELECT id, market, side, price, quantity, remaining, status, created_at FROM vex2_orders WHERE account_id=$1 AND status IN ('open','partially_filled') ORDER BY created_at DESC LIMIT 100", [account.id]),
+        db.query(
+          `SELECT f.id, f.market, f.price, f.quantity, f.created_at,
+                  CASE WHEN f.buyer_account_id=$1 THEN 'buy' ELSE 'sell' END AS side
+           FROM vex2_fills f
+           WHERE f.buyer_account_id=$1 OR f.seller_account_id=$1
+           ORDER BY f.created_at DESC LIMIT 50`,
+          [account.id]
+        )
+      ]);
+      return res.status(200).json({ account, balances: balances.rows, openOrders: orders.rows, recentFills: fills.rows });
+    }
     db = poolProvider();
     if (req.method === 'POST') {
       const token = randomBytes(32).toString('base64url');
@@ -68,31 +96,7 @@ export function createAccountHandler(poolProvider = getPool) {
       }
     }
 
-    const token = bearer(req);
-    if (!token) return res.status(401).json({ error: 'A valid Bearer session token is required.' });
-    const result = await db.query(
-      `SELECT a.id, a.handle, a.created_at
-       FROM vex2_account_sessions s
-       JOIN vex2_accounts a ON a.id = s.account_id
-       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
-       LIMIT 1`,
-      [hashToken(token)]
-    );
-    if (!result.rowCount) return res.status(401).json({ error: 'Session is invalid or expired.' });
-    const account = result.rows[0];
-    const [balances, orders, fills] = await Promise.all([
-      db.query('SELECT asset, available, locked FROM vex2_balances WHERE account_id=$1 ORDER BY asset', [account.id]),
-      db.query("SELECT id, market, side, price, quantity, remaining, status, created_at FROM vex2_orders WHERE account_id=$1 AND status IN ('open','partially_filled') ORDER BY created_at DESC LIMIT 100", [account.id]),
-      db.query(
-        `SELECT f.id, f.market, f.price, f.quantity, f.created_at,
-                CASE WHEN f.buyer_account_id=$1 THEN 'buy' ELSE 'sell' END AS side
-         FROM vex2_fills f
-         WHERE f.buyer_account_id=$1 OR f.seller_account_id=$1
-         ORDER BY f.created_at DESC LIMIT 50`,
-        [account.id]
-      )
-    ]);
-    return res.status(200).json({ account, balances: balances.rows, openOrders: orders.rows, recentFills: fills.rows });
+
   } catch (error) {
     return sendUnavailable(res, error);
   }
