@@ -22,14 +22,14 @@ function unavailable(res, e) {
   console.error('VEXT order API failed:', e?.code || e?.message || 'unknown');
   return fail(res, 503, 'Order service temporarily unavailable.');
 }
-export default async function handler(req, res) {
+export function createOrdersHandler(poolProvider = getPool) {\n  return async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!['POST','GET','DELETE'].includes(req.method)) return fail(res,405,'Method not allowed');
   const token=tokenFrom(req);
   if (!token) return fail(res,401,'A valid Bearer session token is required.');
   let db, client;
   try {
-    db=getPool();
+    db=poolProvider();
     if(req.method==='GET'){
       const accountId=await accountFor(db,token);
       if(!accountId) return fail(res,401,'Session is invalid or expired.');
