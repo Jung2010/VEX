@@ -64,8 +64,8 @@ export async function runLiquidityAgent(client, market) {
     [agent.id, base, quoteAsset]
   );
   const byAsset = Object.fromEntries(balances.rows.map(x => [x.asset, x]));
-  const baseAvailable = toUnits(String(byAsset[base]?.available || '0'));
-  const quoteAvailable = toUnits(String(byAsset[quoteAsset]?.available || '0'));
+  let baseAvailable = toUnits(String(byAsset[base]?.available || '0'));
+  let quoteAvailable = toUnits(String(byAsset[quoteAsset]?.available || '0'));
   const inventoryUnits = baseAvailable + toUnits(String(byAsset[base]?.locked || '0'));
   const inventory = Number(fromUnits(inventoryUnits));
   const plan = planLiquidityQuotes({
@@ -134,7 +134,8 @@ export async function runLiquidityAgent(client, market) {
         [agent.id,market,item.side,priceText,qtyText,key]
       );
       proposals.push(inserted.rows[0]);
-      if(item.side==='buy') quoteAvailable; // balance is re-read on the next cycle
+      if(item.side==='buy') quoteAvailable -= item.reserve;
+      else baseAvailable -= item.reserve;
     }
   }
   const inventorySnapshot = {
