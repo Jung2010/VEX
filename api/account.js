@@ -8,13 +8,13 @@ function hashToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 function sendUnavailable(res, error) {
-  if (error?.code === 'VEX_PREVIEW_DB_NOT_CONFIGURED') {
+  if (error?.code === 'VEXT_DB_NOT_CONFIGURED') {
     return res.status(503).json({ error: 'Preview account service is not enabled until an isolated Preview database is configured.', code: error.code });
   }
   if (error?.code === '42P01') {
-    return res.status(503).json({ error: 'Preview schema is not initialized. Apply the reviewed VEX v2 migrations to the isolated Preview database.' });
+    return res.status(503).json({ error: 'Preview schema is not initialized. Apply the reviewed VEXT v2 migrations to the isolated Preview database.' });
   }
-  console.error('VEX account API failed:', error?.code || error?.message || 'unknown');
+  console.error('VEXT account API failed:', error?.code || error?.message || 'unknown');
   return res.status(503).json({ error: 'Account service temporarily unavailable.' });
 }
 function bearer(req) {
