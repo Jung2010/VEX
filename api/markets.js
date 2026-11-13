@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     ]);
     return res.status(200).json({ assets: a.rows, markets: m.rows, agents, mode: 'simulation-only', dataSource: 'database' });
   } catch (e) {
-    if (e?.code === '42P01' || e?.code === 'VEX_PREVIEW_DB_NOT_CONFIGURED') {
+    if (e?.code === '42P01' || e?.code === 'VEXT_DB_NOT_CONFIGURED') {
       return res.status(200).json({
         assets, markets, agents, mode: 'simulation-only', dataSource: 'preview-seed',
         notice: e.code === '42P01'
