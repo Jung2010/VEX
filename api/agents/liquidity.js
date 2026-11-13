@@ -156,7 +156,7 @@ export default async function handler(req, res) {
         [agentId, market]
       ) : { rows: [] };
       const fills = agentId ? await db.query(
-        "SELECT COUNT(*)::int AS fill_count,COALESCE(SUM(quantity),0)::text AS traded_base,COALESCE(SUM(price*quantity),0)::text AS traded_quote FROM vex2_fills WHERE buyer_account_id=$1 OR seller_account_id=$1",
+        "SELECT COUNT(*)::int AS fill_count,COALESCE(SUM(quantity),0)::text AS traded_base,COALESCE(SUM(price*quantity),0)::text AS traded_quote FROM vex2_fills WHERE market=$2 AND (buyer_account_id=$1 OR seller_account_id=$1)",
         [agentId]
       ) : { rows: [{ fill_count: 0, traded_base: '0', traded_quote: '0' }] };
       const balanceMap = Object.fromEntries(a.rows.map(x => [x.asset, x]));
