@@ -64,7 +64,9 @@ export default async function handler(req, res) {
       return res.status(200).json({cancelled:true,id});
     }
     const body=req.body||{};
-    const order=validateLimitOrder({market:body.market,side:body.side,price:String(body.price),quantity:String(body.quantity)});
+    let order;
+    try { order=validateLimitOrder({market:body.market,side:body.side,price:String(body.price),quantity:String(body.quantity)}); }
+    catch(e) { await client.query('ROLLBACK'); return fail(res,400,e.message||'Invalid limit order.'); }
     const key=String(body.idempotencyKey||'');
     if(!/^[A-Za-z0-9_-]{12,80}$/.test(key)) {await client.query('ROLLBACK');return fail(res,400,'idempotencyKey must be 12–80 URL-safe characters.');}
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[order.market]);
