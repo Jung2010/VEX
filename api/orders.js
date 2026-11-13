@@ -47,7 +47,7 @@ export function createOrdersHandler(poolProvider = getPool) {
     if(!accountId){await client.query('ROLLBACK');return fail(res,401,'Session is invalid or expired.');}
     if(req.method==='DELETE'){
       const id=String(req.query?.id||'');
-      if(!/^\\d+$/.test(id)){await client.query('ROLLBACK');return fail(res,400,'Invalid order id.');}
+      if(!/^\d+$/.test(id)){await client.query('ROLLBACK');return fail(res,400,'Invalid order id.');}
       const peek=await client.query(`SELECT market FROM vex2_orders
         WHERE id=$1 AND account_id=$2 AND status IN ('open','partially_filled')`,[id,accountId]);
       if(!peek.rowCount){await client.query('ROLLBACK');return fail(res,404,'Open order not found.');}
