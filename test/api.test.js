@@ -177,3 +177,45 @@ test('orders API rolls back when the account has insufficient balance', async ()
   assert.ok(calls.includes('ROLLBACK'));
   assert.ok(!calls.some(q => q.includes('INSERT INTO vex2_orders')));
 });
+
+
+test('orders API accepts a numeric order ID and refunds the reserved balance on cancellation', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const q = String(sql).trim();
+      calls.push({ q, params });
+      if (q.includes('SELECT a.id FROM vex2_account_sessions')) return { rows: [{ id: 41 }], rowCount: 1 };
+      if (q.includes('SELECT market FROM vex2_orders')) return { rows: [{ market: 'CCC-KRW' }], rowCount: 1 };
+      if (q.includes('SELECT id,market,side,price,remaining FROM vex2_orders')) return { rows: [{ id: '123', market: 'CCC-KRW', side: 'buy', price: '1000', remaining: '2' }], rowCount: 1 };
+      if (q.includes('SELECT base_asset,quote_asset FROM vex2_markets')) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {}
+  };
+  const pool = { async connect() { return client; } };
+  const handler = createOrdersHandler(() => pool);
+  const res = response();
+  await handler(request('DELETE', {
+    headers: { authorization: 'Bearer ' + 'x'.repeat(43) },
+    query: { id: '123' }
+  }), res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.cancelled, true);
+  assert.equal(res.body.id, '123');
+  assert.ok(calls.some(x => x.q.includes('available=available+$3::numeric') && x.params[2] === '2000'));
+  assert.ok(calls.some(x => x.q === 'COMMIT'));
+});
+
+test('orders API rejects a non-numeric cancellation ID as invalid', async () => {
+  const fake = fakePool();
+  const handler = createOrdersHandler(() => fake.pool);
+  const res = response();
+  await handler(request('DELETE', {
+    headers: { authorization: 'Bearer ' + 'x'.repeat(43) },
+    query: { id: 'not-an-id' }
+  }), res);
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'Invalid order id.');
+  assert.ok(fake.calls.some(x => x.sql === 'ROLLBACK'));
+});
