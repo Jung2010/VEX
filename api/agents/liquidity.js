@@ -58,6 +58,23 @@ export async function runLiquidityAgent(client, market) {
   }
   const { base_asset: base, quote_asset: quoteAsset, last_price: referencePrice } = m.rows[0];
   const agent = await ensureAgent(client);
+  const config = await client.query(
+    "SELECT enabled FROM vex2_agent_config WHERE agent=$1",
+    [AGENT_NAME]
+  );
+  if (config.rowCount && !config.rows[0].enabled) {
+    return {
+      agent: { ...agent, name: AGENT_NAME },
+      market,
+      mode: 'simulation-only',
+      execution: 'paused',
+      quoteLevels: 0,
+      cancelledPreviousQuotes: 0,
+      orders: [],
+      quotePlan: null,
+      status: 'paused'
+    };
+  }
   const cancelled = await cancelAgentQuotes(client, agent.id, market);
   await client.query(`INSERT INTO vex2_agent_positions
     (account_id,market,base_asset,quote_asset,base_quantity,average_cost)
