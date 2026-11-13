@@ -31,7 +31,7 @@ export default async function handler(req,res){
     return res.status(200).json({mode:'simulation-only',accounts:accounts.rows[0],markets:markets.rows,
       openOrders:orders.rows[0].open_orders,activity:fills.rows[0],agents:agents.rows,agentControls:agentsConfig.rows});
   }catch(e){
-    if(e?.code==='42P01') return fail(res,503,'Apply VEXT migration 004 on the isolated Preview database.');
+    if(e?.code==='42P01') return fail(res,503,'Apply VEXT migrations 004 and 006 on the isolated Preview database.');
     console.error('VEXT admin API:',e?.message||e);
     return fail(res,503,'Superuser dashboard unavailable.');
   }
