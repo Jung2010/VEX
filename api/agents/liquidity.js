@@ -105,10 +105,10 @@ export async function runLiquidityAgent(client, market) {
   const stepBps = 20;
   for (let level = 0; level < levels; level++) {
     const offset = BigInt(halfSpreadBps + level * stepBps);
-    const bidLevelPrice = toUnits(String(referencePrice)) * (10000n - offset) / 10000n;
-    const askLevelPrice = toUnits(String(referencePrice)) * (10000n + offset) / 10000n;
-    let bidLevelQty = toUnits('2');
-    let askLevelQty = toUnits('2');
+    const bidLevelPrice = toUnits(String(plan.bid?.price || referencePrice)) * (10000n - BigInt(level * stepBps)) / 10000n;
+    const askLevelPrice = toUnits(String(plan.ask?.price || referencePrice)) * (10000n + BigInt(level * stepBps)) / 10000n;
+    let bidLevelQty = plan.bid ? toUnits('2') : 0n;
+    let askLevelQty = plan.ask ? toUnits('2') : 0n;
     if (bestAsk.rows[0]?.price && bidLevelPrice >= toUnits(String(bestAsk.rows[0].price))) bidLevelQty = 0n;
     if (bestBid.rows[0]?.price && askLevelPrice <= toUnits(String(bestBid.rows[0].price))) askLevelQty = 0n;
     if (askLevelQty > baseAvailable) askLevelQty = baseAvailable;
