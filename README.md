@@ -22,3 +22,13 @@ Vercel Root Directory should remain the repository root. Preview and Production 
 
 ## Safety
 Educational simulation only. Never connect real exchanges, payment rails, or real funds.
+
+
+## Phase 3: server-side Preview accounts (gated)
+- `api/account.js` creates a simulated guest account (POST) and reads its balances, open orders, and recent fills (GET).
+- Session tokens are random bearer credentials; only SHA-256 token hashes are stored in the database. Tokens expire after 30 days.
+- Account creation and initial balance inserts run in one database transaction.
+- The API uses only `VEX_PREVIEW_DATABASE_URL`. It intentionally does not fall back to `DATABASE_URL`, which is currently shared between Preview and Production.
+- Configure `VEX_PREVIEW_DATABASE_URL` only after provisioning a dedicated Preview Neon database/branch. Then manually apply `db/001_vex2_init.sql` followed by `db/002_vex2_accounts.sql` to that isolated database.
+- Until that dedicated connection and migrations exist, the account endpoint returns a clear 503 and does not write to any database.
+- The current browser-local paper account remains the active UI mode; the server account API is not yet wired into the UI.
