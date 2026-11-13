@@ -18,7 +18,7 @@ async function accountFor(db, token) {
 }
 function unavailable(res, e) {
   if (e?.code === 'VEXT_DB_NOT_CONFIGURED' || e?.code === '42P01')
-    return fail(res, 503, 'Isolated Preview database and VEXT migrations 001–003 are required.');
+    return fail(res, 503, 'Isolated Preview database and VEXT migrations 001–004 are required.');
   console.error('VEXT order API failed:', e?.stack || e?.code || e?.message || 'unknown');
   return fail(res, 503, 'Order service temporarily unavailable.');
 }
@@ -125,6 +125,18 @@ export function createOrdersHandler(poolProvider = getPool) {
       remainingUnits-=qtyUnits;filledUnits+=qtyUnits;
       await client.query(`INSERT INTO vex2_fills(market,price,quantity,buy_order,sell_order,buyer_account_id,seller_account_id)
         VALUES($1,$2::numeric,$3::numeric,$4,$5,$6,$7)`,[order.market,String(maker.price),qty,buyerOrder,sellerOrder,buyer,seller]);
+      for (const interval of [60,300,900,3600]) {
+        await client.query(`INSERT INTO vex2_market_candles
+          (market,interval_seconds,bucket_at,open,high,low,close,volume,trade_count)
+          VALUES($1,$2,to_timestamp(floor(extract(epoch FROM NOW())/$2)*$2),$3,$3,$3,$3,$4,1)
+          ON CONFLICT(market,interval_seconds,bucket_at) DO UPDATE SET
+            high=GREATEST(vex2_market_candles.high,EXCLUDED.high),
+            low=LEAST(vex2_market_candles.low,EXCLUDED.low),
+            close=EXCLUDED.close,
+            volume=vex2_market_candles.volume+EXCLUDED.volume,
+            trade_count=vex2_market_candles.trade_count+1`,
+          [order.market,interval,String(maker.price),qty]);
+      }
     }
     const status=remainingUnits===0n?'filled':filledUnits>0n?'partially_filled':'open';
     const remaining=fromUnits(remainingUnits), filled=fromUnits(filledUnits);
