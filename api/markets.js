@@ -9,7 +9,7 @@ const markets = [
   { symbol: 'TOLR-CCC', base_asset: 'TOLR', quote_asset: 'CCC', last_price: '0.2500000000' },
   { symbol: 'SECX-CCC', base_asset: 'SECX', quote_asset: 'CCC', last_price: '2.0000000000' }
 ];
-const agents = ['VEX Liquidity Desk', 'Pulse Agent', 'Anchor Agent'];
+const agents = ['VEXT Liquidity Desk', 'Pulse Agent', 'Anchor Agent'];
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
           : 'Dedicated Preview database is not configured; showing static preview data.'
       });
     }
-    console.error('VEX markets API failed:', e?.code || 'unknown');
+    console.error('VEXT markets API failed:', e?.code || 'unknown');
     return res.status(503).json({ error: 'Market data unavailable' });
   }
 }
