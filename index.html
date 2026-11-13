@@ -69,7 +69,7 @@ async function loadSuperuser(){
   const key=$('#adminKey').value;if(!key){$('#adminStatus').textContent='관리자 키를 입력하세요.';return}
   $('#adminLoadBtn').disabled=true;$('#adminStatus').textContent='인증 중…';
   try{const r=await fetch('/api/superuser',{headers:{'x-vext-admin-key':key}}),d=await r.json();if(!r.ok)throw new Error(d.error||'관리자 조회 실패');
-    const stats=[['계정',d.accounts.total],['열린 주문',d.openOrders],['24시간 체결',d.activity.fills_24h],['24시간 거래대금',fmt(d.activity.volume_24h)+' KRW']];
+    const stats=[['계정',d.accounts.total],['열린 주문',d.openOrders],['24시간 체결',d.activity.fills_24h],['24시간 거래대금',fmt(d.activity.volume_24h)+' (호가단위 합산)']];
     $('#adminDashboard').innerHTML=stats.map(([k,v])=>'<div class="admin-stat"><small>'+esc(k)+'</small><b>'+esc(v)+'</b></div>').join('')+
       '<div class="admin-stat"><small>시장</small><b>'+d.markets.length+'개</b><small>'+d.markets.map(x=>esc(x.symbol)+' '+fmt(x.last_price)).join('<br>')+'</small></div>'+
       '<div class="admin-stat"><small>시스템 에이전트</small><b>'+d.agents.length+'개</b><small>'+d.agents.map(x=>esc(x.handle)+' · 주문 '+x.open_orders+' · 체결 '+x.fills).join('<br>')+'</small></div>';
