@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 
 const source = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-const script = source.match(/<script[^>]*>([\\s\\S]*?)<\\/script>/i)?.[1];
+const script = source.match(/<script[^>]*>([\s\S]*?)<\/script>/i)?.[1];
 assert.ok(script, 'index.html must contain the application script');
 const wait = (ms = 25) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -27,7 +27,7 @@ function createApp() {
     { asset: 'SECX', available: '250', locked: '0' }
   ];
   const account = { account: { id: 1, handle: 'guest_test' }, balances, openOrders: [], recentFills: [] };
-  const dom = new JSDOM(source.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/i, ''), {
+  const dom = new JSDOM(source.replace(/<script[^>]*>[\s\S]*?<\/script>/i, ''), {
     url: 'https://vext.test/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
