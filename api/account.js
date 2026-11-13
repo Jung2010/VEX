@@ -84,10 +84,9 @@ export default async function handler(req, res) {
       db.query("SELECT id, market, side, price, quantity, remaining, status, created_at FROM vex2_orders WHERE account_id=$1 AND status IN ('open','partially_filled') ORDER BY created_at DESC LIMIT 100", [account.id]),
       db.query(
         `SELECT f.id, f.market, f.price, f.quantity, f.created_at,
-                CASE WHEN o.id = f.buy_order THEN 'buy' ELSE 'sell' END AS side
+                CASE WHEN f.buyer_account_id=$1 THEN 'buy' ELSE 'sell' END AS side
          FROM vex2_fills f
-         JOIN vex2_orders o ON o.id IN (f.buy_order, f.sell_order)
-         WHERE o.account_id=$1
+         WHERE f.buyer_account_id=$1 OR f.seller_account_id=$1
          ORDER BY f.created_at DESC LIMIT 50`,
         [account.id]
       )
