@@ -131,7 +131,7 @@ test('orders API matches a buy against a resting sell at maker price', async () 
       if (q.includes('SELECT id FROM vex2_orders WHERE account_id=$1')) return { rows: [], rowCount: 0 };
       if (q.includes('INSERT INTO vex2_orders')) return { rows: [{ id: 22, account_id: 41, market: 'CCC-KRW', side: 'buy', price: '1000', quantity: '1', remaining: '1', status: 'open' }], rowCount: 1 };
       if (/SELECT\s+id\s*,\s*account_id\s*,\s*side\s*,\s*price\s*,\s*remaining\s+FROM\s+vex2_orders/i.test(q)) return { rows: [{ id: 11, account_id: 77, side: 'sell', price: '900', remaining: '1' }], rowCount: 1 };
-      return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
     },
     release() { calls.push({ q: 'RELEASE', params: [] }); }
   };
@@ -161,7 +161,7 @@ test('orders API rolls back when the account has insufficient balance', async ()
       if (q.includes('SELECT a.id FROM vex2_account_sessions')) return { rows: [{ id: 41 }], rowCount: 1 };
       if (q.includes('SELECT base_asset,quote_asset FROM vex2_markets')) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
       if (q.includes('SELECT available FROM vex2_balances')) return { rows: [{ available: '5' }], rowCount: 1 };
-      return { rows: [], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
     },
     release() {}
   };
