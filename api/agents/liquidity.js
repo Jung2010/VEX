@@ -155,9 +155,31 @@ export default async function handler(req, res) {
         "SELECT id,market,side,price,quantity,remaining,status,created_at FROM vex2_orders WHERE account_id=$1 AND market=$2 AND status IN ('open','partially_filled') ORDER BY side,price",
         [agentId, market]
       ) : { rows: [] };
+      const fills = agentId ? await db.query(
+        "SELECT COUNT(*)::int AS fill_count,COALESCE(SUM(quantity),0)::text AS traded_base,COALESCE(SUM(price*quantity),0)::text AS traded_quote FROM vex2_fills WHERE buyer_account_id=$1 OR seller_account_id=$1",
+        [agentId]
+      ) : { rows: [{ fill_count: 0, traded_base: '0', traded_quote: '0' }] };
+      const balanceMap = Object.fromEntries(a.rows.map(x => [x.asset, x]));
+      const baseAsset = m.rows[0].symbol.split('-')[0];
+      const quoteAsset = m.rows[0].symbol.split('-')[1];
+      const baseTotal = Number(balanceMap[baseAsset]?.available || 0) + Number(balanceMap[baseAsset]?.locked || 0);
+      const quoteTotal = Number(balanceMap[quoteAsset]?.available || 0) + Number(balanceMap[quoteAsset]?.locked || 0);
+      const markedBaseValue = baseTotal * Number(m.rows[0].last_price);
+      const fillStats = fills.rows[0] || { fill_count: 0, traded_base: '0', traded_quote: '0' };
       return res.status(200).json({
         market, agent: AGENT_NAME, mode: 'simulation-only',
-        execution: 'status-only', balances: a.rows, orders: orders.rows
+        execution: 'status-only', balances: a.rows, orders: orders.rows,
+        metrics: {
+          openOrderCount: orders.rowCount,
+          fillCount: fillStats.fill_count,
+          tradedBase: fillStats.traded_base,
+          tradedQuote: fillStats.traded_quote,
+          baseInventory: String(baseTotal),
+          quoteInventory: String(quoteTotal),
+          markedBaseValue: String(markedBaseValue),
+          indicativeEquity: String(quoteTotal + markedBaseValue),
+          valuationNote: 'Indicative market-value snapshot; not realized P&L.'
+        }
       });
     }
     client = await db.connect();
