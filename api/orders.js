@@ -17,9 +17,9 @@ async function accountFor(db, token) {
   return r.rows[0]?.id || null;
 }
 function unavailable(res, e) {
-  if (e?.code === 'VEX_PREVIEW_DB_NOT_CONFIGURED' || e?.code === '42P01')
-    return fail(res, 503, 'Isolated Preview database and VEX migrations 001–003 are required.');
-  console.error('VEX order API failed:', e?.code || e?.message || 'unknown');
+  if (e?.code === 'VEXT_DB_NOT_CONFIGURED' || e?.code === '42P01')
+    return fail(res, 503, 'Isolated Preview database and VEXT migrations 001–003 are required.');
+  console.error('VEXT order API failed:', e?.code || e?.message || 'unknown');
   return fail(res, 503, 'Order service temporarily unavailable.');
 }
 export default async function handler(req, res) {
@@ -70,15 +70,20 @@ export default async function handler(req, res) {
     const key=String(body.idempotencyKey||'');
     if(!/^[A-Za-z0-9_-]{12,80}$/.test(key)) {await client.query('ROLLBACK');return fail(res,400,'idempotencyKey must be 12–80 URL-safe characters.');}
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[order.market]);
-    const existing=await client.query('SELECT id,status,remaining FROM vex2_orders WHERE account_id=$1 AND idempotency_key=$2',[accountId,key]);
-    if(existing.rowCount){await client.query('COMMIT');return res.status(200).json({order:existing.rows[0],duplicate:true});}
+    const existing=await client.query('SELECT id,market,side,price,quantity,status,remaining FROM vex2_orders WHERE account_id=$1 AND idempotency_key=$2',[accountId,key]);
+    if(existing.rowCount){
+      const prior=existing.rows[0];
+      const same=prior.market===order.market && prior.side===order.side && toUnits(String(prior.price))===order.priceUnits && toUnits(String(prior.quantity))===order.quantityUnits;
+      if(!same){await client.query('ROLLBACK');return fail(res,409,'This idempotency key was already used for a different order.');}
+      await client.query('COMMIT');return res.status(200).json({order:prior,duplicate:true});
+    }
     const market=await client.query('SELECT base_asset,quote_asset FROM vex2_markets WHERE symbol=$1 AND enabled=true',[order.market]);
     if(!market.rowCount){await client.query('ROLLBACK');return fail(res,400,'Unknown or disabled market.');}
     const {base_asset:base,quote_asset:quote}=market.rows[0];
     const reserveAsset=order.side==='buy'?quote:base;
     const reserve=order.side==='buy'?fromUnits(multiply(order.priceUnits,order.quantityUnits)):String(body.quantity);
     const balance=await client.query('SELECT available FROM vex2_balances WHERE account_id=$1 AND asset=$2 FOR UPDATE',[accountId,reserveAsset]);
-    if(!balance.rowCount||Number(balance.rows[0].available)<reserve){await client.query('ROLLBACK');return fail(res,400,'Insufficient available balance.');}
+    if(!balance.rowCount||toUnits(String(balance.rows[0].available))<toUnits(reserve)){await client.query('ROLLBACK');return fail(res,400,'Insufficient available balance.');}
     await client.query('UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',[accountId,reserveAsset,reserve]);
     const inserted=await client.query(`INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key)
       VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,account_id,market,side,price,quantity,remaining,status,created_at`,
