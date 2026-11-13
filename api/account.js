@@ -23,13 +23,13 @@ function bearer(req) {
   return match?.[1] || null;
 }
 
-export default async function handler(req, res) {
+export function createAccountHandler(poolProvider = getPool) {\n  return async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
 
   let db;
   try {
-    db = getPool();
+    db = poolProvider();
     if (req.method === 'POST') {
       const token = randomBytes(32).toString('base64url');
       const tokenHash = hashToken(token);
