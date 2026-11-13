@@ -117,3 +117,63 @@ test('account API returns a controlled 503 when the Preview database is unavaila
   assert.equal(res.statusCode, 503);
   assert.equal(res.body.code, 'VEXT_DB_NOT_CONFIGURED');
 });
+
+
+test('orders API matches a buy against a resting sell at maker price', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const q = String(sql).trim();
+      calls.push({ q, params });
+      if (q.includes('SELECT a.id FROM vex2_account_sessions')) return { rows: [{ id: 41 }], rowCount: 1 };
+      if (q.includes('SELECT base_asset,quote_asset FROM vex2_markets')) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
+      if (q.includes('SELECT available FROM vex2_balances')) return { rows: [{ available: '1000' }], rowCount: 1 };
+      if (q.includes('SELECT id FROM vex2_orders WHERE account_id=$1')) return { rows: [], rowCount: 0 };
+      if (q.includes('INSERT INTO vex2_orders')) return { rows: [{ id: 22, account_id: 41, market: 'CCC-KRW', side: 'buy', price: '1000', quantity: '1', remaining: '1', status: 'open' }], rowCount: 1 };
+      if (q.includes('SELECT id,account_id,side,price,remaining FROM vex2_orders')) return { rows: [{ id: 11, account_id: 77, side: 'sell', price: '900', remaining: '1' }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() { calls.push({ q: 'RELEASE', params: [] }); }
+  };
+  const pool = { async connect() { return client; }, async query() { return { rows: [], rowCount: 0 }; } };
+  const handler = createOrdersHandler(() => pool);
+  const res = response();
+  await handler(request('POST', {
+    headers: { authorization: 'Bearer ' + 'x'.repeat(43) },
+    body: { market: 'CCC-KRW', side: 'buy', price: '1000', quantity: '1', idempotencyKey: 'maker-price-test-001' }
+  }), res);
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.order.status, 'filled');
+  assert.equal(res.body.order.filledQuantity, '1');
+  assert.equal(res.body.order.remainingQuantity, '0');
+  assert.ok(calls.some(x => x.q.includes('INSERT INTO vex2_fills')));
+  assert.ok(calls.some(x => x.q.includes('locked=locked-$3::numeric,available=available+$3::numeric')));
+  assert.ok(calls.some(x => x.q === 'COMMIT'));
+  assert.ok(!calls.some(x => x.q === 'ROLLBACK'));
+});
+
+test('orders API rolls back when the account has insufficient balance', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const q = String(sql).trim(); calls.push(q);
+      if (q.includes('SELECT a.id FROM vex2_account_sessions')) return { rows: [{ id: 41 }], rowCount: 1 };
+      if (q.includes('SELECT base_asset,quote_asset FROM vex2_markets')) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
+      if (q.includes('SELECT available FROM vex2_balances')) return { rows: [{ available: '5' }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {}
+  };
+  const pool = { async connect() { return client; } };
+  const handler = createOrdersHandler(() => pool);
+  const res = response();
+  await handler(request('POST', {
+    headers: { authorization: 'Bearer ' + 'x'.repeat(43) },
+    body: { market: 'CCC-KRW', side: 'buy', price: '1000', quantity: '1', idempotencyKey: 'insufficient-test-001' }
+  }), res);
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.error, /Insufficient/);
+  assert.ok(calls.includes('ROLLBACK'));
+  assert.ok(!calls.some(q => q.includes('INSERT INTO vex2_orders')));
+});
