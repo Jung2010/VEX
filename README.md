@@ -1,34 +1,54 @@
-# VEX — Virtual Exchange Economy Simulator v2
+# VEXT — Virtual Economy Exchange Simulator
 
-Fictional, simulation-only market economy. No live exchange connectivity, real-money execution, leverage, or external asset custody.
+VEXT is a fictional, simulation-only virtual economy for learning about markets, liquidity, and order matching. It has no live exchange connectivity, real-money execution, leverage, payment rails, or external asset custody.
 
-## Preview scope
-- Assets: CCC, TOLR, SECX; USD is simulated fiat.
-- Additive PostgreSQL schema uses the vex2_ prefix and leaves legacy tables untouched.
-- Read-only market and health endpoints; API requests never create or migrate tables.
-- Pure fixed-point limit-order matching core with price-time priority and unit tests.
-- Manual additive SQL migration at `db/001_vex2_init.sql`; run only against a dedicated preview database after reviewing it.
-- Planned agents: VEX Liquidity Desk, Pulse Agent, Anchor Agent.
+## Current Preview
 
-## Phase 2 local paper account
-- The browser UI includes a local-only simulated wallet, limit orders, a synthetic order book, open-order cancellation, and recent simulated fills.
-- Local account state is stored in browser localStorage and is not a secure identity, server-side account, or shared multi-user ledger.
-- Initial demo balances are fictional and resettable from the UI.
-- Synthetic liquidity is a deterministic teaching fixture, not a live market feed.
-- No live exchange, payment, real-money, or leverage functionality.
+- Product-facing name: **VEXT**. The GitHub repository remains named `VEX`.
+- Simulated assets: KRW (quote currency), CCC, TOLR, and SECX.
+- Markets: CCC-KRW, TOLR-CCC, and SECX-CCC.
+- Spot-style limit orders only, using fictional balances.
+- A browser-local demo wallet and a separate server-backed Preview account mode.
+- Server accounts use bearer sessions; only SHA-256 token hashes are stored in PostgreSQL.
+- Order matching uses price-time priority, resting-order prices, partial fills, fixed-point arithmetic, idempotency keys, and per-market transaction locking.
+- Market agents are simulated fixtures: VEXT Liquidity Desk, Pulse Agent, and Anchor Agent.
 
-## Deployment and database safety
-Vercel Root Directory should remain the repository root. Preview and Production currently share the same Neon environment configuration, so do not apply schema migrations until a separate Preview database/branch is provisioned and verified. All new tables are isolated under vex2_.
+## API
 
-## Safety
-Educational simulation only. Never connect real exchanges, payment rails, or real funds.
+- `GET /api/health` — Preview service and database health.
+- `GET /api/markets` — enabled assets, markets, and simulated agents.
+- `POST /api/account` — create a fictional guest account and issue a session token.
+- `GET /api/account` — read the authenticated account, balances, open orders, and recent fills.
+- `GET /api/orders?market=CCC-KRW` — read the shared simulated order book.
+- `POST /api/orders` — submit a simulated limit order.
+- `DELETE /api/orders?id=<order-id>` — cancel the authenticated account's open order.
 
+Account and order endpoints require the server-issued bearer token. The token is returned once at account creation; the browser stores it locally for the Preview session.
 
-## Phase 3: server-side Preview accounts (gated)
-- `api/account.js` creates a simulated guest account (POST) and reads its balances, open orders, and recent fills (GET).
-- Session tokens are random bearer credentials; only SHA-256 token hashes are stored in the database. Tokens expire after 30 days.
-- Account creation and initial balance inserts run in one database transaction.
-- The API uses only `VEX_PREVIEW_DATABASE_URL`. It intentionally does not fall back to `DATABASE_URL`, which is currently shared between Preview and Production.
-- Configure `VEX_PREVIEW_DATABASE_URL` only after provisioning a dedicated Preview Neon database/branch. Then manually apply `db/001_vex2_init.sql` followed by `db/002_vex2_accounts.sql` to that isolated database.
-- Until that dedicated connection and migrations exist, the account endpoint returns a clear 503 and does not write to any database.
-- The current browser-local paper account remains the active UI mode; the server account API is not yet wired into the UI.
+## Database and environment safety
+
+- New schema objects use the `vex2_` prefix.
+- SQL migrations are manual and ordered: `db/001_vex2_init.sql`, `db/002_vex2_accounts.sql`, then `db/003_vex2_matching.sql`.
+- The Preview application reads only `VEXT_DATABASE_URL`; it never falls back to the legacy `DATABASE_URL`.
+- Database access is explicitly gated to Vercel Preview. Production is not enabled by this code path.
+- API requests never create tables or run migrations.
+- The dedicated Neon Preview branch has the VEXT schema. The default/main branch is intentionally untouched.
+- Do not apply these migrations to Production or repoint the legacy database configuration.
+
+## Tests
+
+Run the fixed-point matching unit tests with:
+
+```sh
+npm install
+npm test
+```
+
+The GitHub Actions workflow runs the same command for pushes and pull requests targeting `rebuild/vex-v2`.
+
+## Limitations
+
+- The browser UI has not yet had a full manual interaction test across account creation, order submission, partial fills, and cancellation.
+- Preview health and market-read endpoints have been smoke-tested; authenticated POST/DELETE API flows still need automated end-to-end coverage.
+- Agent names are currently descriptive fixtures; autonomous agent scheduling and market behavior are not yet implemented as production-grade services.
+- The project is educational simulation software only. Never connect real exchanges, payment providers, or real funds.
