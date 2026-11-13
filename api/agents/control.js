@@ -40,6 +40,13 @@ export default async function handler(req, res) {
     if (typeof req.body?.enabled !== 'boolean') return fail(res, 400, 'enabled must be a boolean.');
     const enabled = req.body.enabled;
     await client.query('BEGIN');
+    // Serialize control changes with every market-specific quote cycle.
+    const activeMarkets = await client.query(
+      'SELECT symbol FROM vex2_markets WHERE enabled=true ORDER BY symbol'
+    );
+    for (const market of activeMarkets.rows) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [market.symbol]);
+    }
     const account = await client.query('SELECT id FROM vex2_accounts WHERE handle=$1 FOR UPDATE', [AGENT_HANDLE]);
     if (!account.rowCount) throw new Error('Liquidity agent account does not exist.');
     const accountId = account.rows[0].id;
