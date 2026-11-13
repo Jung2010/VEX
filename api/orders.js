@@ -83,23 +83,40 @@ export function createOrdersHandler(poolProvider = getPool) {
     if(!market.rowCount){await client.query('ROLLBACK');return fail(res,400,'Unknown or disabled market.');}
     const {base_asset:base,quote_asset:quote}=market.rows[0];
     const reserveAsset=order.side==='buy'?quote:base;
-    const reserve=order.side==='buy'?fromUnits(multiply(order.priceUnits,order.quantityUnits)):String(body.quantity);
-    const balance=await client.query('SELECT available FROM vex2_balances WHERE account_id=$1 AND asset=$2 FOR UPDATE',[accountId,reserveAsset]);
-    if(!balance.rowCount||toUnits(String(balance.rows[0].available))<toUnits(reserve)){await client.query('ROLLBACK');return fail(res,400,'Insufficient available balance.');}
-    await client.query('UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',[accountId,reserveAsset,reserve]);
     const opposite=order.side==='buy'?'sell':'buy';
     const ownCross=await client.query(`SELECT id FROM vex2_orders WHERE account_id=$1 AND market=$2 AND side=$3 AND status IN ('open','partially_filled') AND remaining>0 AND (($4='buy' AND price<=$5) OR ($4='sell' AND price>=$5)) LIMIT 1`,[accountId,order.market,opposite,order.side,String(body.price)]);
     if(ownCross.rowCount){await client.query('ROLLBACK');return fail(res,409,'Order would cross your own resting order. Cancel or amend the existing order first.');}
-    const inserted=await client.query(`INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key)
-      VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,account_id,market,side,price,quantity,remaining,status,created_at`,
-      [accountId,order.market,order.side,String(body.price),String(body.quantity),key]);
-    const incoming=inserted.rows[0];
     const sort=order.side==='buy'?'price ASC':'price DESC';
     const resting=await client.query(`SELECT id,account_id,side,price,remaining FROM vex2_orders
       WHERE market=$1 AND side=$2 AND status IN ('open','partially_filled') AND account_id<>$3
       AND remaining>0 AND (($4='buy' AND price<=$5) OR ($4='sell' AND price>=$5))
       ORDER BY ${sort},created_at ASC,id ASC FOR UPDATE`,
       [order.market,opposite,accountId,order.side,String(body.price)]);
+    // Reserve only what this order actually needs: maker-price notional for
+    // immediately executable quantity, plus limit-price notional for any
+    // quantity that remains on the book.
+    let plannedRemaining=order.quantityUnits;
+    let requiredQuote=0n;
+    if(order.side==='buy'){
+      for(const maker of resting.rows){
+        if(plannedRemaining<=0n) break;
+        const makerRemaining=toUnits(String(maker.remaining));
+        const qty=plannedRemaining<makerRemaining?plannedRemaining:makerRemaining;
+        requiredQuote+=multiply(toUnits(String(maker.price)),qty);
+        plannedRemaining-=qty;
+      }
+      requiredQuote+=multiply(order.priceUnits,plannedRemaining);
+    } else {
+      requiredQuote=order.quantityUnits;
+    }
+    const reserve=fromUnits(requiredQuote);
+    const balance=await client.query('SELECT available FROM vex2_balances WHERE account_id=$1 AND asset=$2 FOR UPDATE',[accountId,reserveAsset]);
+    if(!balance.rowCount||toUnits(String(balance.rows[0].available))<requiredQuote){await client.query('ROLLBACK');return fail(res,400,'Insufficient available balance for executable quantity and remaining limit order.');}
+    await client.query('UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',[accountId,reserveAsset,reserve]);
+    const inserted=await client.query(`INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key)
+      VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,account_id,market,side,price,quantity,remaining,status,created_at`,
+      [accountId,order.market,order.side,String(body.price),String(body.quantity),key]);
+    const incoming=inserted.rows[0];
     let remainingUnits=order.quantityUnits, filledUnits=0n;
     for(const maker of resting.rows){
       if(remainingUnits<=0n) break;
@@ -116,10 +133,6 @@ export function createOrdersHandler(poolProvider = getPool) {
       await client.query('UPDATE vex2_balances SET available=available+$3::numeric WHERE account_id=$1 AND asset=$2',[buyer,base,qty]);
       await client.query('UPDATE vex2_balances SET locked=locked-$3::numeric WHERE account_id=$1 AND asset=$2',[seller,base,qty]);
       await client.query('UPDATE vex2_balances SET available=available+$3::numeric WHERE account_id=$1 AND asset=$2',[seller,quote,notional]);
-      if(order.side==='buy' && order.priceUnits>priceUnits){
-        const improvement=fromUnits(multiply(order.priceUnits-priceUnits,qtyUnits));
-        await client.query('UPDATE vex2_balances SET locked=locked-$3::numeric,available=available+$3::numeric WHERE account_id=$1 AND asset=$2',[accountId,quote,improvement]);
-      }
       const makerRemaining=makerRemainingUnits-qtyUnits;
       await client.query("UPDATE vex2_orders SET remaining=$2::numeric,status=$3 WHERE id=$1",[maker.id,fromUnits(makerRemaining),makerRemaining===0n?'filled':'partially_filled']);
       remainingUnits-=qtyUnits;filledUnits+=qtyUnits;
