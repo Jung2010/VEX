@@ -100,21 +100,42 @@ export async function runLiquidityAgent(client, market) {
   if (bestBid.rows[0]?.price && askPrice <= toUnits(String(bestBid.rows[0].price))) askQty = 0n;
 
   const proposals = [];
-  const proposed = [
-    bidQty > 0n ? { side: 'buy', price: fromUnits(bidPrice), quantity: fromUnits(bidQty), asset: quoteAsset, reserve: fromUnits(mul(bidPrice, bidQty)) } : null,
-    askQty > 0n ? { side: 'sell', price: fromUnits(askPrice), quantity: fromUnits(askQty), asset: base, reserve: fromUnits(askQty) } : null
-  ].filter(Boolean);
-  for (const item of proposed) {
-    await client.query(
-      'UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',
-      [agent.id, item.asset, item.reserve]
-    );
-    const key = `liq_${market.replace('-', '_')}_${item.side}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-    const inserted = await client.query(
-      "INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key) VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,side,price,quantity,remaining",
-      [agent.id, market, item.side, item.price, item.quantity, key]
-    );
-    proposals.push(inserted.rows[0]);
+  const levels = 5;
+  const halfSpreadBps = 35;
+  const stepBps = 20;
+  for (let level = 0; level < levels; level++) {
+    const offset = BigInt(halfSpreadBps + level * stepBps);
+    const bidLevelPrice = toUnits(String(referencePrice)) * (10000n - offset) / 10000n;
+    const askLevelPrice = toUnits(String(referencePrice)) * (10000n + offset) / 10000n;
+    let bidLevelQty = toUnits('2');
+    let askLevelQty = toUnits('2');
+    if (bestAsk.rows[0]?.price && bidLevelPrice >= toUnits(String(bestAsk.rows[0].price))) bidLevelQty = 0n;
+    if (bestBid.rows[0]?.price && askLevelPrice <= toUnits(String(bestBid.rows[0].price))) askLevelQty = 0n;
+    if (askLevelQty > baseAvailable) askLevelQty = baseAvailable;
+    if (bidLevelQty > 0n) {
+      const reserve = mul(bidLevelPrice, bidLevelQty);
+      if (reserve > quoteAvailable) bidLevelQty = quoteAvailable * SCALE / bidLevelPrice;
+    }
+    const sides = [
+      bidLevelQty > 0n ? {side:'buy',price:bidLevelPrice,quantity:bidLevelQty,asset:quoteAsset,reserve:mul(bidLevelPrice,bidLevelQty)} : null,
+      askLevelQty > 0n ? {side:'sell',price:askLevelPrice,quantity:askLevelQty,asset:base,reserve:askLevelQty} : null
+    ].filter(Boolean);
+    for (const item of sides) {
+      const reserveText = fromUnits(item.reserve);
+      const qtyText = fromUnits(item.quantity);
+      const priceText = fromUnits(item.price);
+      await client.query(
+        'UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',
+        [agent.id,item.asset,reserveText]
+      );
+      const key = `liq_${market.replace('-', '_')}_${item.side}_${Date.now()}_${level}_${Math.random().toString(36).slice(2,7)}`;
+      const inserted = await client.query(
+        "INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key) VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,side,price,quantity,remaining",
+        [agent.id,market,item.side,priceText,qtyText,key]
+      );
+      proposals.push(inserted.rows[0]);
+      if(item.side==='buy') quoteAvailable; // balance is re-read on the next cycle
+    }
   }
   const inventorySnapshot = {
     [base]: fromUnits(inventoryUnits),
@@ -128,7 +149,8 @@ export async function runLiquidityAgent(client, market) {
     agent: { ...agent, name: AGENT_NAME },
     market,
     mode: 'simulation-only',
-    execution: 'virtual-resting-orders',
+    execution: 'autonomous-multilevel-virtual-resting-orders',
+    quoteLevels: levels,
     cancelledPreviousQuotes: cancelled,
     orders: proposals,
     quotePlan: plan,
@@ -191,7 +213,7 @@ export default async function handler(req, res) {
     if (client) try { await client.query('ROLLBACK'); } catch {}
     if (error?.status) return fail(res, error.status, error.message);
     if (error?.code === 'VEXT_DB_NOT_CONFIGURED' || error?.code === '42P01')
-      return fail(res, 503, 'Dedicated Preview database and VEXT migrations 001–003 are required.');
+      return fail(res, 503, 'Dedicated Preview database and VEXT migrations 001–004 are required.');
     console.error('VEXT liquidity agent failed:', error?.stack || error?.message || 'unknown');
     return fail(res, 503, 'Liquidity agent temporarily unavailable.');
   } finally {
