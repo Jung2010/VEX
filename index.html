@@ -27,7 +27,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>Number(v).toLocaleString('en-US',{maximumFractionDigits:8});
 const fresh=()=>({balances:{KRW:10000000,CCC:1000,TOLR:2500,SECX:250},orders:[],fills:[],nextId:1});
-function loadState(){try{const x=JSON.parse(localStorage.getItem(STORE));if(x&&x.balances&&Array.isArray(x.orders)&&Array.isArray(x.fills))return x}catch{}return fresh()}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(STORE));if(x&&x.balances&&Array.isArray(x.orders)&&Array.isArray(x.fills)){if(Object.prototype.hasOwnProperty.call(x.balances,'USD')){x.balances.KRW=(x.balances.KRW||0)+x.balances.USD*1000;delete x.balances.USD;for(const o of x.orders){if(o.market==='CCC-USD'){o.market='CCC-KRW';o.price*=1000}}for(const f of x.fills){if(f.market==='CCC-USD'){f.market='CCC-KRW';f.price*=1000}}localStorage.setItem(STORE,JSON.stringify(x))}return x}}catch{}return fresh()}
 let state=loadState(), assets=SEED_ASSETS, markets=SEED_MARKETS, agents=AGENT_NAMES;
 let currentMarket=markets[0];
 function save(){localStorage.setItem(STORE,JSON.stringify(state))}
