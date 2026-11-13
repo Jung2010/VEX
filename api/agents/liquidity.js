@@ -59,6 +59,12 @@ export async function runLiquidityAgent(client, market) {
   const { base_asset: base, quote_asset: quoteAsset, last_price: referencePrice } = m.rows[0];
   const agent = await ensureAgent(client);
   const cancelled = await cancelAgentQuotes(client, agent.id, market);
+  await client.query(`INSERT INTO vex2_agent_positions
+    (account_id,market,base_asset,quote_asset,base_quantity,average_cost)
+    SELECT $1,$2,$3,$4,b.available+b.locked,$5
+    FROM vex2_balances b WHERE b.account_id=$1 AND b.asset=$3
+    ON CONFLICT(account_id,market) DO NOTHING`,
+    [agent.id,market,base,quoteAsset,String(referencePrice)]);
   const balances = await client.query(
     'SELECT asset,available,locked FROM vex2_balances WHERE account_id=$1 AND asset IN ($2,$3) FOR UPDATE',
     [agent.id, base, quoteAsset]
@@ -181,6 +187,11 @@ export default async function handler(req, res) {
         "SELECT COUNT(*)::int AS fill_count,COALESCE(SUM(quantity),0)::text AS traded_base,COALESCE(SUM(price*quantity),0)::text AS traded_quote FROM vex2_fills WHERE market=$2 AND (buyer_account_id=$1 OR seller_account_id=$1)",
         [agentId, market]
       ) : { rows: [{ fill_count: 0, traded_base: '0', traded_quote: '0' }] };
+      const positionResult = agentId ? await db.query(
+        'SELECT base_quantity,average_cost,realized_pnl,bought_quantity,sold_quantity FROM vex2_agent_positions WHERE account_id=$1 AND market=$2',
+        [agentId,market]
+      ) : {rows:[]};
+      const position = positionResult.rows[0] || {base_quantity:'0',average_cost:'0',realized_pnl:'0',bought_quantity:'0',sold_quantity:'0'};
       const balanceMap = Object.fromEntries(a.rows.map(x => [x.asset, x]));
       const baseAsset = m.rows[0].symbol.split('-')[0];
       const quoteAsset = m.rows[0].symbol.split('-')[1];
@@ -200,7 +211,17 @@ export default async function handler(req, res) {
           quoteInventory: String(quoteTotal),
           markedBaseValue: String(markedBaseValue),
           indicativeEquity: String(quoteTotal + markedBaseValue),
-          valuationNote: 'Indicative market-value snapshot; not realized P&L.'
+          accounting: {
+            method: 'weighted-average-cost',
+            baseline: 'Opening inventory valued at first accounting snapshot; earlier realized P&L is not reconstructed.',
+            baseQuantity: position.base_quantity,
+            averageCost: position.average_cost,
+            realizedPnl: position.realized_pnl,
+            unrealizedPnl: String((baseTotal * Number(m.rows[0].last_price)) - (baseTotal * Number(position.average_cost))),
+            boughtQuantity: position.bought_quantity,
+            soldQuantity: position.sold_quantity
+          },
+          valuationNote: 'Indicative market-value snapshot; realized and unrealized P&L are tracked separately.'
         }
       });
     }
