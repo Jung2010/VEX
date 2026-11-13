@@ -22,7 +22,8 @@ function unavailable(res, e) {
   console.error('VEXT order API failed:', e?.code || e?.message || 'unknown');
   return fail(res, 503, 'Order service temporarily unavailable.');
 }
-export function createOrdersHandler(poolProvider = getPool) {\n  return async function handler(req, res) {
+export function createOrdersHandler(poolProvider = getPool) {
+  return async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!['POST','GET','DELETE'].includes(req.method)) return fail(res,405,'Method not allowed');
   const token=tokenFrom(req);
@@ -133,4 +134,7 @@ export function createOrdersHandler(poolProvider = getPool) {\n  return async fu
     return res.status(201).json({order:{id:incoming.id,market:order.market,side:order.side,price:String(body.price),quantity:String(body.quantity),filledQuantity:filled,remainingQuantity:remaining,status}});
   }catch(e){if(client)try{await client.query('ROLLBACK')}catch{}return unavailable(res,e)}
   finally{client?.release()}
+  };
 }
+
+export default createOrdersHandler();
