@@ -125,6 +125,21 @@ export function createOrdersHandler(poolProvider = getPool) {
       remainingUnits-=qtyUnits;filledUnits+=qtyUnits;
       await client.query(`INSERT INTO vex2_fills(market,price,quantity,buy_order,sell_order,buyer_account_id,seller_account_id)
         VALUES($1,$2::numeric,$3::numeric,$4,$5,$6,$7)`,[order.market,String(maker.price),qty,buyerOrder,sellerOrder,buyer,seller]);
+      await client.query(`UPDATE vex2_agent_positions p SET
+        average_cost=CASE WHEN p.base_quantity+$3::numeric=0 THEN 0
+          ELSE ((p.base_quantity*p.average_cost)+($3::numeric*$4::numeric))/(p.base_quantity+$3::numeric) END,
+        base_quantity=p.base_quantity+$3::numeric,
+        bought_quantity=p.bought_quantity+$3::numeric,updated_at=NOW()
+        WHERE p.account_id=$1 AND p.market=$2
+        AND EXISTS(SELECT 1 FROM vex2_accounts a WHERE a.id=p.account_id AND a.handle='system_vext_liquidity_desk')`,
+        [buyer,order.market,qty,String(maker.price)]);
+      await client.query(`UPDATE vex2_agent_positions p SET
+        realized_pnl=p.realized_pnl+(($4::numeric-p.average_cost)*$3::numeric),
+        base_quantity=GREATEST(0,p.base_quantity-$3::numeric),
+        sold_quantity=p.sold_quantity+$3::numeric,updated_at=NOW()
+        WHERE p.account_id=$1 AND p.market=$2
+        AND EXISTS(SELECT 1 FROM vex2_accounts a WHERE a.id=p.account_id AND a.handle='system_vext_liquidity_desk')`,
+        [seller,order.market,qty,String(maker.price)]);
       for (const interval of [60,300,900,3600]) {
         await client.query(`INSERT INTO vex2_market_candles
           (market,interval_seconds,bucket_at,open,high,low,close,volume,trade_count)
