@@ -19,7 +19,7 @@ async function accountFor(db, token) {
 function unavailable(res, e) {
   if (e?.code === 'VEXT_DB_NOT_CONFIGURED' || e?.code === '42P01')
     return fail(res, 503, 'Isolated Preview database and VEXT migrations 001–003 are required.');
-  console.error('VEXT order API failed:', e?.code || e?.message || 'unknown');
+  console.error('VEXT order API failed:', e?.stack || e?.code || e?.message || 'unknown');
   return fail(res, 503, 'Order service temporarily unavailable.');
 }
 export function createOrdersHandler(poolProvider = getPool) {
