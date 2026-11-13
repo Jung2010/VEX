@@ -12,7 +12,8 @@
 <article class="panel"><h2>SIMULATED AGENTS</h2><div id="agents" class="agentlist"><span class="muted">불러오는 중…</span></div><div class="subtle">VEXT Liquidity Desk는 가상 잔고를 사용해 주문장에 양방향 지정가 호가를 공급합니다.</div><div class="actions"><button id="runLiquidityBtn" class="primary">지금 호가 갱신</button><button id="autoLiquidityBtn">자동 운용 중지</button></div><div id="liquidityStatus" class="status" role="status">자동 운용 초기화 중…</div><div class="subtle">5단계 양방향 호가 · 8초마다 갱신 · 이 탭이 열려 있을 때만 작동</div></article>
 <article class="panel"><h2>LIMIT ORDER</h2><label for="side">주문 방향</label><select id="side"><option value="buy">매수</option><option value="sell">매도</option></select><label for="price">지정 가격</label><input id="price" inputmode="decimal" value="1.00" autocomplete="off"><label for="quantity">수량</label><input id="quantity" inputmode="decimal" value="10" autocomplete="off"><div class="subtle" id="estimate">예상 주문 금액: —</div><div class="actions"><button id="submitOrder" class="primary">모의 지정가 주문</button></div><div id="orderStatus" class="status" role="status"></div><div id="serverStatus" class="subtle" role="status">서버 계정은 전용 Preview DB 설정 후 사용할 수 있습니다.</div></article>
 <article class="panel wide"><h2>ORDER BOOK · SIMULATED LIQUIDITY</h2><div class="book"><div class="bookcol"><h3 class="sell">ASK / 매도 호가</h3><div id="asks"></div></div><div class="bookcol"><h3 class="buy">BID / 매수 호가</h3><div id="bids"></div></div></div><div class="subtle">고정된 가상 유동성으로 구성된 참고 호가입니다. 사용자 주문은 체결되거나 미체결 주문으로 남습니다.</div></article>
-<article class="panel full"><h2>PRICE CHART · OHLCV</h2><div class="toolbar"><select id="candleInterval"><option value="60">1분</option><option value="300">5분</option><option value="900">15분</option><option value="3600">1시간</option></select><span id="chartMeta" class="muted">가상 체결 데이터 대기</span></div><div class="chart-wrap"><canvas id="priceChart" width="1200" height="300"></canvas></div></article>\n<article class="panel"><h2>OPEN ORDERS</h2><div id="openOrders" class="empty">미체결 주문 없음</div></article>
+<article class="panel full"><h2>PRICE CHART · OHLCV</h2><div class="toolbar"><select id="candleInterval"><option value="60">1분</option><option value="300">5분</option><option value="900">15분</option><option value="3600">1시간</option></select><span id="chartMeta" class="muted">가상 체결 데이터 대기</span></div><div class="chart-wrap"><canvas id="priceChart" width="1200" height="300"></canvas></div></article>
+<article class="panel"><h2>OPEN ORDERS</h2><div id="openOrders" class="empty">미체결 주문 없음</div></article>
 <article class="panel wide"><h2>RECENT SIMULATED FILLS</h2><div id="fills" class="empty">체결 내역 없음</div></article>
 <article class="panel full"><h2>MARKETS</h2><div id="markets"></div></article>
 </section>
@@ -35,7 +36,10 @@ let currentMarket=markets[0];
 // Explicitly initialize server-mode state before the first render.
 let serverMode=false;
 let serverToken=localStorage.getItem('vex.v2.server-token')||'';
-let serverBook=[];\nlet agentTimer=null;\nlet agentRunning=false;\nlet chartTimer=null;
+let serverBook=[];
+let agentTimer=null;
+let agentRunning=false;
+let chartTimer=null;
 function save(){localStorage.setItem(STORE,JSON.stringify(state))}
 function pair(){return {base:currentMarket.base_asset||currentMarket.base_currency,quote:currentMarket.quote_asset||currentMarket.quote_currency,price:Number(currentMarket.last_price??currentMarket.reference_price??1)}}
 function fmt(v){return Number(v).toLocaleString('en-US',{maximumFractionDigits:8})}
