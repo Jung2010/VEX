@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { getPool } from '../lib/db.js';
 
-const STARTING_BALANCES = { USD: '10000', CCC: '1000', TOLR: '2500', SECX: '250' };
+const STARTING_BALANCES = { KRW: '10000000', CCC: '1000', TOLR: '2500', SECX: '250' };
 const SESSION_DAYS = 30;
 
 function hashToken(token) {
