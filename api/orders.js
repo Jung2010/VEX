@@ -46,6 +46,7 @@ export default async function handler(req, res) {
     if(!accountId){await client.query('ROLLBACK');return fail(res,401,'Session is invalid or expired.');}
     if(req.method==='DELETE'){
       const id=String(req.query?.id||'');
+      if(!/^\\d+$/.test(id)){await client.query('ROLLBACK');return fail(res,400,'Invalid order id.');}
       const peek=await client.query(`SELECT market FROM vex2_orders
         WHERE id=$1 AND account_id=$2 AND status IN ('open','partially_filled')`,[id,accountId]);
       if(!peek.rowCount){await client.query('ROLLBACK');return fail(res,404,'Open order not found.');}
@@ -85,11 +86,13 @@ export default async function handler(req, res) {
     const balance=await client.query('SELECT available FROM vex2_balances WHERE account_id=$1 AND asset=$2 FOR UPDATE',[accountId,reserveAsset]);
     if(!balance.rowCount||toUnits(String(balance.rows[0].available))<toUnits(reserve)){await client.query('ROLLBACK');return fail(res,400,'Insufficient available balance.');}
     await client.query('UPDATE vex2_balances SET available=available-$3::numeric,locked=locked+$3::numeric WHERE account_id=$1 AND asset=$2',[accountId,reserveAsset,reserve]);
+    const opposite=order.side==='buy'?'sell':'buy';
+    const ownCross=await client.query(`SELECT id FROM vex2_orders WHERE account_id=$1 AND market=$2 AND side=$3 AND status IN ('open','partially_filled') AND remaining>0 AND (($4='buy' AND price<=$5) OR ($4='sell' AND price>=$5)) LIMIT 1`,[accountId,order.market,opposite,order.side,String(body.price)]);
+    if(ownCross.rowCount){await client.query('ROLLBACK');return fail(res,409,'Order would cross your own resting order. Cancel or amend the existing order first.');}
     const inserted=await client.query(`INSERT INTO vex2_orders(account_id,market,side,price,quantity,remaining,status,idempotency_key)
       VALUES($1,$2,$3,$4,$5,$5,'open',$6) RETURNING id,account_id,market,side,price,quantity,remaining,status,created_at`,
       [accountId,order.market,order.side,String(body.price),String(body.quantity),key]);
     const incoming=inserted.rows[0];
-    const opposite=order.side==='buy'?'sell':'buy';
     const sort=order.side==='buy'?'price ASC':'price DESC';
     const resting=await client.query(`SELECT id,account_id,side,price,remaining FROM vex2_orders
       WHERE market=$1 AND side=$2 AND status IN ('open','partially_filled') AND account_id<>$3
