@@ -1,7 +1,6 @@
-import { getPool, ensureSchema } from '../lib/db.js';
+import { getPool } from '../lib/db.js';
 export default async function handler(req, res) {
   try {
-    await ensureSchema();
     const db = getPool();
     const [a, m] = await Promise.all([
       db.query("SELECT code,name,kind FROM vex2_assets WHERE enabled=true ORDER BY CASE code WHEN 'USD' THEN 0 WHEN 'CCC' THEN 1 WHEN 'TOLR' THEN 2 ELSE 3 END"),
