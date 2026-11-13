@@ -46,13 +46,13 @@ export default async function handler(req, res) {
     let cancelled = 0;
     if (!enabled) {
       const orders = await client.query(
-        "SELECT o.id,o.market,o.side,o.price,o.remaining,m.base_asset,m.quote_asset FROM vex2_orders o JOIN vex2_markets m ON m.symbol=o.market WHERE o.account_id=$1 AND o.status IN ('open','partially_filled') AND o.remaining>0 FOR UPDATE OF o",
+        "SELECT o.id,o.market,o.side,o.price,o.remaining,(o.price*o.remaining)::text AS reserve_amount,m.base_asset,m.quote_asset FROM vex2_orders o JOIN vex2_markets m ON m.symbol=o.market WHERE o.account_id=$1 AND o.status IN ('open','partially_filled') AND o.remaining>0 FOR UPDATE OF o",
         [accountId]
       );
       for (const order of orders.rows) {
         const asset = order.side === 'buy' ? order.quote_asset : order.base_asset;
         const amount = order.side === 'buy'
-          ? String(Number(order.price) * Number(order.remaining))
+          ? String(order.reserve_amount)
           : String(order.remaining);
         await client.query(
           'UPDATE vex2_balances SET available=available+$3::numeric,locked=locked-$3::numeric WHERE account_id=$1 AND asset=$2',
