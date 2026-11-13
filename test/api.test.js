@@ -126,7 +126,7 @@ test('orders API matches a buy against a resting sell at maker price', async () 
       const q = String(sql).trim();
       calls.push({ q, params });
       if (q.includes('SELECT a.id FROM vex2_account_sessions')) return { rows: [{ id: 41 }], rowCount: 1 };
-      if (/SELECT\\s+base_asset\\s*,\\s*quote_asset\\s+FROM\\s+vex2_markets/i.test(q)) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
+      if (/FROM\\s+vex2_markets/i.test(q)) return { rows: [{ base_asset: 'CCC', quote_asset: 'KRW' }], rowCount: 1 };
       if (q.includes('SELECT available FROM vex2_balances')) return { rows: [{ available: '1000' }], rowCount: 1 };
       if (q.includes('SELECT id FROM vex2_orders WHERE account_id=$1')) return { rows: [], rowCount: 0 };
       if (q.includes('INSERT INTO vex2_orders')) return { rows: [{ id: 22, account_id: 41, market: 'CCC-KRW', side: 'buy', price: '1000', quantity: '1', remaining: '1', status: 'open' }], rowCount: 1 };
