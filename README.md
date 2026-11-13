@@ -11,12 +11,12 @@ VEXT is a fictional, simulation-only virtual economy for learning about markets,
 - A browser-local demo wallet and a separate server-backed Preview account mode.
 - Server accounts use bearer sessions; only SHA-256 token hashes are stored in PostgreSQL.
 - Order matching uses price-time priority, resting-order prices, partial fills, fixed-point arithmetic, idempotency keys, and per-market transaction locking.
-- Market agents are simulated fixtures: VEXT Liquidity Desk, Pulse Agent, and Anchor Agent.
+- Market agents include VEXT Liquidity Desk, Pulse Agent, and Anchor Agent. The Liquidity Desk now has an inventory-aware, volatility-sensitive quote planner and a Preview quote-proposal endpoint; it does not yet place autonomous resting orders.
 
 ## API
 
 - `GET /api/health` — Preview service and database health.
-- `GET /api/markets` — enabled assets, markets, and simulated agents.
+- `GET /api/markets` — enabled assets, markets, and simulated agents.\n- `GET /api/agents/liquidity?market=CCC-KRW` — risk-bounded simulated bid/ask quote proposals.
 - `POST /api/account` — create a fictional guest account and issue a session token.
 - `GET /api/account` — read the authenticated account, balances, open orders, and recent fills.
 - `GET /api/orders?market=CCC-KRW` — read the shared simulated order book.
@@ -50,5 +50,5 @@ The GitHub Actions workflow runs the same command for pushes and pull requests t
 
 - The browser UI has not yet had a full manual interaction test across account creation, order submission, partial fills, and cancellation.
 - Preview health and market-read endpoints have been smoke-tested; authenticated POST/DELETE API flows still need automated end-to-end coverage.
-- Agent names are currently descriptive fixtures; autonomous agent scheduling and market behavior are not yet implemented as production-grade services.
+- The Liquidity Desk currently produces indicative quotes only. Automated order placement, quote refresh/cancel lifecycle, agent-funded inventory, and live order-book integration remain future Preview-only work. Pulse Agent and Anchor Agent are still descriptive fixtures.
 - The project is educational simulation software only. Never connect real exchanges, payment providers, or real funds.
